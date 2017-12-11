@@ -1,13 +1,13 @@
 # Maintainer: Brandon Tolsch <btolsch@gmail.com>
 pkgname=lemonbar-xft-xbm-git
 _pkgname=bar
-pkgver=270.08aae79
+pkgver=271.5e85b95
 pkgrel=1
 pkgdesc="A lightweight xcb based bar with ported xft and xbm support."
 arch=('i686' 'x86_64')
 url="https://github.com/btolsch/bar"
 license=('MIT')
-depends=('libxcb' 'libxft' 'libx11')
+depends=('libxcb' 'libxft' 'libx11' 'xcb-util-image')
 makedepends=('git')
 provides=('bar-aint-recursive' 'lemonbar')
 conflicts=('bar-aint-recursive' 'lemonbar')
