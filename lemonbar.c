@@ -271,8 +271,8 @@ shift (monitor_t *mon, int x, int align, int ch_width)
             x = mon->width - ch_width;
             break;
     }
-    
-        /* Draw the background first */
+
+    /* Draw the background first */
     fill_rect(mon->pixmap, gc[GC_CLEAR], x, 0, ch_width, bh);
     return x;
 }
@@ -315,7 +315,7 @@ draw_char (monitor_t *mon, font_t *cur_font, int x, int align, uint16_t ch)
     } else {
         /* xcb accepts string in UCS-2 BE, so swap */
         ch = (ch >> 8) | (ch << 8);
-        
+
         // The coordinates here are those of the baseline
         xcb_poly_text_16_simple(c, mon->pixmap, gc[GC_DRAW],
                             x, y,
@@ -497,7 +497,7 @@ area_add (char *str, const char *optend, char **end, monitor_t *mon, const int x
     }
 
     if (area_stack.at + 1 > area_stack.max) {
-        fprintf(stderr, "Cannot add any more clickable areas (used %d/%d)\n", 
+        fprintf(stderr, "Cannot add any more clickable areas (used %d/%d)\n",
                 area_stack.at, area_stack.max);
         return false;
     }
@@ -605,7 +605,7 @@ parse (char *text)
 
     for (;;) {
         if (*p == '\0' || *p == '\n')
-			break;
+            break;
 
         if (p[0] == '%' && p[1] == '{' && (block_end = strchr(p++, '}'))) {
             p++;
@@ -659,10 +659,10 @@ parse (char *text)
                               }
                               else
                               { p++; continue; }
-					          XftDrawDestroy (xft_draw);
-					          if (!(xft_draw = XftDrawCreate (dpy, cur_mon->pixmap, visual_ptr , colormap ))) {
-						        fprintf(stderr, "Couldn't create xft drawable\n");
-					          }
+                              XftDrawDestroy (xft_draw);
+                              if (!(xft_draw = XftDrawCreate (dpy, cur_mon->pixmap, visual_ptr , colormap ))) {
+                                  fprintf(stderr, "Couldn't create xft drawable\n");
+                              }
 
                               p++;
                               pos_x = 0;
@@ -1155,20 +1155,20 @@ xcb_visualid_t
 get_visual (void)
 {
 
-    XVisualInfo xv; 
+    XVisualInfo xv;
     xv.depth = 32;
     int result = 0;
-    XVisualInfo* result_ptr = NULL; 
+    XVisualInfo* result_ptr = NULL;
     result_ptr = XGetVisualInfo(dpy, VisualDepthMask, &xv, &result);
 
     if (result > 0) {
         visual_ptr = result_ptr->visual;
         return result_ptr->visualid;
     }
-    
+
     //Fallback
-    visual_ptr = DefaultVisual(dpy, scr_nbr);	
-	return scr->root_visual;
+    visual_ptr = DefaultVisual(dpy, scr_nbr);
+    return scr->root_visual;
 }
 
 // Parse an X-styled geometry string, we don't support signed offsets though.
@@ -1234,7 +1234,7 @@ xconn (void)
         exit (EXIT_FAILURE);
     }
 
-	XSetEventQueueOwner(dpy, XCBOwnsEventQueue);
+    XSetEventQueueOwner(dpy, XCBOwnsEventQueue);
 
     if (xcb_connection_has_error(c)) {
         fprintf(stderr, "Couldn't connect to X\n");
@@ -1245,7 +1245,7 @@ xconn (void)
     scr = xcb_setup_roots_iterator(xcb_get_setup(c)).data;
 
     /* Try to get a RGBA visual and build the colormap for that */
-	visual = get_visual();
+    visual = get_visual();
     colormap = xcb_generate_id(c);
     xcb_create_colormap(c, XCB_COLORMAP_ALLOC_NONE, colormap, scr->root, visual);
 }
