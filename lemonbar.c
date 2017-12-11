@@ -17,6 +17,7 @@
 #include <xcb/xinerama.h>
 #endif
 #include <xcb/randr.h>
+#include <xcb/xcb_image.h>
 
 #include <X11/Xft/Xft.h>
 #include <X11/Xlib-xcb.h>
@@ -71,6 +72,12 @@ typedef struct area_stack_t {
     int at, max;
     area_t *area;
 } area_stack_t;
+
+typedef struct xbm_icon_t {
+    int width, height;
+    char *filename;
+    xcb_image_t *image;
+} xbm_icon_t;
 
 enum {
     ATTR_OVERL = (1<<0),
@@ -128,10 +135,16 @@ static XftDraw *xft_draw;
 static wchar_t xft_char[MAX_WIDTHS];
 static char    xft_width[MAX_WIDTHS];
 
+#define ICON_CACHE_SIZE 256
+static int icon_count = 0;
+static int icon_index = 0;
+static xbm_icon_t *icon_cache[ICON_CACHE_SIZE] = {NULL};
+
 void
 update_gc (void)
 {
     xcb_change_gc(c, gc[GC_DRAW], XCB_GC_FOREGROUND, (const uint32_t []){ fgc.v });
+    xcb_change_gc(c, gc[GC_DRAW], XCB_GC_BACKGROUND, (const uint32_t []){ bgc.v });
     xcb_change_gc(c, gc[GC_CLEAR], XCB_GC_FOREGROUND, (const uint32_t []){ bgc.v });
     xcb_change_gc(c, gc[GC_ATTR], XCB_GC_FOREGROUND, (const uint32_t []){ ugc.v });
     XftColorFree(dpy, visual_ptr, colormap , &sel_fg);
@@ -325,6 +338,121 @@ draw_char (monitor_t *mon, font_t *cur_font, int x, int align, uint16_t ch)
     draw_lines(mon, x, ch_width);
 
     return ch_width;
+}
+
+xbm_icon_t* load_xbm(char* filename) {
+    for (int i=0; i<icon_count; i++) {
+        if (strcmp(icon_cache[i]->filename, filename) == 0) {
+            return icon_cache[i];
+        }
+    }
+    FILE *f = NULL;
+    f = fopen(filename, "r");
+    if (!f)
+        return NULL;
+
+    int width = -1;
+    int height = -1;
+
+    char line[256];
+    char define_name[256];
+    int value;
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '\n') continue;
+        if (sscanf(line, "#define %s %d", define_name, &value) == 2) {
+            char *type = strrchr(define_name, '_');
+            if (type)
+                type++;
+            else
+                type = define_name;
+
+            if (strcmp(type, "width") == 0)
+                width = value;
+            if (strcmp(type, "height") == 0)
+                height = value;
+
+            continue;
+        }
+        if (width <= 0 || height <= 0) {
+            fclose(f);
+            return NULL;
+        }
+        if (
+            sscanf(line, "static const unsigned char %s = {", define_name) != 1 &&
+            sscanf(line, "static unsigned char %s = {", define_name) != 1 &&
+            sscanf(line, "static const char %s = {", define_name) != 1 &&
+            sscanf(line, "static char %s = {", define_name) != 1
+        ) {
+            fclose(f);
+            return NULL;
+        }
+
+        xbm_icon_t *icon = calloc(1, sizeof(xbm_icon_t));
+        icon->width = width;
+        icon->height = height;
+        icon->filename = calloc(strlen(filename)+1, sizeof(char));
+        if (icon->filename == NULL) {
+            exit(1);
+        }
+        strcpy(icon->filename, filename);
+
+        xcb_image_t *img = xcb_image_create_native(c, width, height, XCB_IMAGE_FORMAT_XY_BITMAP, 1, NULL, ~0, NULL);
+        img->data = calloc(1, img->size);
+        if (img->data == NULL) {
+            exit(1);
+        }
+
+        for (int y = 0; y < height; y ++) {
+            for (int x = 0; x < width; x+= 8) {
+                if (x != 0 || y != 0)
+                    fgetc(f);
+                int val;
+                if (!fscanf(f, "%x", &val)) {
+                    free(img->data);
+                    xcb_image_destroy(img);
+                    free(icon->filename);
+                    free(icon);
+                    fclose(f);
+                    return NULL;
+                }
+                for (int x2 = x; x2 < width && x2 < x + 8; x2++) {
+                    bool pix = (val >> (x2%8)) & 1;
+                    xcb_image_put_pixel(img, x2, y, pix);
+                }
+            }
+        }
+        icon->image = img;
+
+        if (icon_count == ICON_CACHE_SIZE) {
+            xbm_icon_t *evicted_icon = icon_cache[icon_index];
+            free(evicted_icon->image->data);
+            xcb_image_destroy(evicted_icon->image);
+            free(evicted_icon->filename);
+            free(evicted_icon);
+        } else if (icon_count < ICON_CACHE_SIZE) {
+            icon_count++;
+        }
+        icon_cache[icon_index] = icon;
+        icon_index++;
+        icon_index %= ICON_CACHE_SIZE;
+        fclose(f);
+        return icon;
+    }
+    // Instruction pointer modifiecd by cosmic rays
+    return NULL;
+}
+
+int
+draw_icon (monitor_t *mon, int x, int align, char *filename)
+{
+    xbm_icon_t *icon = load_xbm(filename);
+    if (icon == NULL)
+        return 0;
+    int icon_width = icon->width;
+
+    x = shift(mon, x, align, icon_width);
+    xcb_image_put(c, mon->pixmap, gc[GC_DRAW], icon->image, x, (bh-icon->height) / 2, 0);
+    return icon_width;
 }
 
 rgba_t
@@ -629,6 +757,17 @@ parse (char *text)
                     case 'l': pos_x = 0; align = ALIGN_L; break;
                     case 'c': pos_x = 0; align = ALIGN_C; break;
                     case 'r': pos_x = 0; align = ALIGN_R; break;
+
+                    case 'I':
+                              if (block_end-p > 255)
+                                  break;
+                              char filename[256];
+                              strncpy(filename, p, block_end-p);
+                              filename[block_end-p] = 0;
+                              int icon_width = draw_icon(cur_mon, pos_x, align, filename);
+                              pos_x += icon_width;
+                              area_shift(cur_mon->window, align, icon_width);
+                              break;
 
                     case 'A':
                               button = XCB_BUTTON_INDEX_1;
